@@ -14,6 +14,8 @@
 #pragma execution_character_set("utf-8")
 using namespace std;
 
+void dataMatrixDecode();//
+
 Widget::Widget(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::Widget)
@@ -200,6 +202,7 @@ void Widget::on_pushButton_clicked()
                     arg(base_str).arg(width).arg(height);
         }
     }
+
 }
 
 
@@ -391,7 +394,7 @@ void Widget::on_pushButton_4_clicked()
         QImage src =img.copy();
         DmtxImage *imgdtx;
         QPixmap pix=QPixmap::fromImage(src);
-        QString outstr;
+        QString str;
         int leftLineAngle;
         int bottomLineAngle;
         int cornerx;
@@ -453,8 +456,8 @@ void Widget::on_pushButton_4_clicked()
                     //                    cout << msg->output << endl;
                     //                    cout << msg->outputIdx << endl;
 
-                    std::string strout = (char*)msg->output;//解码信息
-                    outstr=QString::fromStdString(strout);
+                    string strout = (char*)msg->output;//解码信息
+                    str=QString::fromStdString(strout);
                     QString outmsg=QString("<font color=\"#00FF00\">%1</font>").arg(QString::fromStdString(strout));
                     ui->textEdit->setText(outmsg);
 
@@ -537,8 +540,9 @@ void Widget::on_pushButton_4_clicked()
         pix=pix.scaled(ui->label->width(),ui->label->height(),Qt::KeepAspectRatio);//Qt::KeepAspectRatio自适应大小，不变形
         ui->label->setPixmap(pix);
 
-        QString base_str=outstr.left(8);
-        QString label_base_text=QString("信息:左线 %1°底边 %2°角点X %3 角点Y %4 内容 %4..").
+        ui->label_base->clear();
+        QString base_str=str.left(8);
+        QString label_base_text=QString("信息:左边 %1°底边 %2°角点X %3 角点Y %4 内容 %5..").
                 arg(leftLineAngle).arg(bottomLineAngle).arg(cornerx).arg(cornery).arg(base_str);
         ui->label_base->setText(label_base_text);
 
@@ -546,5 +550,77 @@ void Widget::on_pushButton_4_clicked()
         ui->label_time->setText(timestr);
     }
 
+    dataMatrixDecode();//简化版本
+}
 
+
+void dataMatrixDecode()
+{
+    //简化版本
+    QTime time;
+    QImage src("D:/code/QtLearning/dmtxMaker/1.jpg");
+    DmtxMessage *msg;
+    DmtxRegion *reg;
+    DmtxImage *imgdtx;
+    QString outstr;
+
+    time.start();//qt开始计时
+
+    qDebug()<<"src.format() "<<src.format();//注意图片格式要对应 dmtxImageCreate的 不然无法解码
+
+    // 增加超时时间。
+    DmtxTime beginTime = dmtxTimeNow();	// 根据系统设置情况，获得当前时间
+    long timeout_ms = 200;
+    DmtxTime stopTime = dmtxTimeAdd(beginTime, timeout_ms);	// 增加xx ms
+
+    //创建dmtxImage，将qt读取到的图片存储到dmtxImage
+    imgdtx = dmtxImageCreate(src.bits(),src.width(),src.height(),DmtxPack32bppXRGB);
+    assert(imgdtx != NULL);
+    DmtxDecode *dec = dmtxDecodeCreate(imgdtx, 1);//解码
+    assert(dec != NULL);
+    reg = dmtxRegionFindNext(dec,&stopTime);//查找下一个，如果超时则认为没有找到
+    assert(reg != NULL);
+
+    if(dmtxTimeExceeded(stopTime))
+    {
+        qDebug()<<"超时";
+    }
+    else
+    {
+        if (reg != NULL)
+        {
+            msg = dmtxDecodeMatrixRegion(dec, reg, DmtxUndefined);//获取解码信息
+            if (msg != NULL)
+            {
+                cout << msg->output << endl;//输出解码信息
+                cout << msg->outputIdx << endl;
+
+                //qt输出解码信息string->QString
+                string strout = (char*)msg->output;//解码信息
+                outstr=QString::fromStdString(strout);
+                qDebug()<<"解码信息:"<<outstr;//解码信息
+                qDebug()<<"解码信息xx:"<<msg->output;//解码信息
+
+                //二维码坐标信息
+                qDebug()<<"reg->leftLine.locPos.X "<<reg->leftLine.locPos.X;
+                qDebug()<<"reg->leftLine.locPos.Y "<<reg->leftLine.locPos.Y;
+                qDebug()<<"reg->leftLine.locNeg.X "<<reg->leftLine.locNeg.X;
+                qDebug()<<"reg->leftLine.locNeg.Y "<<reg->leftLine.locNeg.Y;
+                qDebug()<<"bottomLine.locPos.X "<<reg->bottomLine.locPos.X;
+                qDebug()<<"bottomLine.locPos.Y "<<reg->bottomLine.locPos.Y;
+                qDebug()<<"bottomLine.locNeg.X "<<reg->bottomLine.locNeg.X;
+                qDebug()<<"bottomLine.locNeg.y "<<reg->bottomLine.locNeg.Y;
+
+                dmtxMessageDestroy(&msg);
+            }
+            else{qDebug()<<"无法检测到2";}
+
+            dmtxRegionDestroy(&reg);
+        }
+        else{qDebug()<<"无法检测到1";}
+    }
+
+    dmtxDecodeDestroy(&dec);
+    dmtxImageDestroy(&imgdtx);
+    qDebug()<<time.elapsed()/1000.0<<"s";
 }
