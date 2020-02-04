@@ -18,12 +18,17 @@ public:
 
 public:
     QImage globalImg;//存储图片用
+    QImage globalImg2;//存储图片用
     QString globastr;//保存str信息
 
 private slots:
     void on_pushButton_clicked();
 
     void on_pushButton_2_clicked();
+
+    void on_pushButton_3_clicked();
+
+    void on_pushButton_4_clicked();
 
 private:
     Ui::Widget *ui;

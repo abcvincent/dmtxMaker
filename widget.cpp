@@ -8,6 +8,8 @@
 #include <QImage>
 #include <QTime>
 #include <QFileDialog>
+#include <QColor>
+#include <QPainter>
 
 #pragma execution_character_set("utf-8")
 using namespace std;
@@ -180,6 +182,12 @@ void Widget::on_pushButton_clicked()
             qDebug()<<"行数："<<bytesPerLine;
 
             QImage img = QImage(pxlData,width,height,bytesPerLine,QImage::Format_RGB888);
+
+            qDebug()<<"QImage 宽度："<<img.width();
+            qDebug()<<"QImage 高度："<<img.height();
+            qDebug()<<"QImage 行数："<<img.bytesPerLine();
+
+
             QImage imgshow=img.scaled( this->ui->label->width(), this->ui->label->height(),Qt:: KeepAspectRatio);
             ui->label->setPixmap(QPixmap::fromImage(imgshow));
 
@@ -292,9 +300,8 @@ ui->label->setPixmap(QPixmap::fromImage(imgshow));
     for (int i=0; i<width*height; i++){
        fprintf(stdout, "%d", (pxl[i*3])==0);
        if (i%width==width-1){
-          fprintf(stdout, "\n");
-       }
-    }
+          fprintf(stdout, "\n");}
+
 */
 
 void Widget::on_pushButton_2_clicked()
@@ -330,4 +337,214 @@ void Widget::on_pushButton_2_clicked()
              QMessageBox::information(this,"信息","保存成功");
          }
      }
+}
+
+void Widget::on_pushButton_3_clicked()
+{
+
+    ui->label->clear();//先清除label内容
+    //打开图片操作
+    QString fileName = QFileDialog::getOpenFileName(
+                this, tr("open image file"),
+                "./", tr("Image files(*.bmp *.jpg *.pbm *.pgm *.png *.ppm *.xbm *.xpm);;All files (*.*)"));
+
+    if(fileName.isEmpty())
+    {
+        QMessageBox mesg;
+        mesg.warning(this,"警告","打开图片失败!");
+        return;
+    }
+    else
+    {
+        ui->label->clear();
+        QPixmap pix(fileName);
+        pix=pix.scaled(ui->label->width(),ui->label->height(),Qt::KeepAspectRatio);
+        ui->label->setPixmap(pix);
+        ui->textEdit->clear();
+
+        QImage img(fileName);
+        // QImage imgcp=img.scaled(ui->label->width(),ui->label->height(),Qt::KeepAspectRatio);//Qt::KeepAspectRatio自适应大小，不变形
+        // ui->label->setPixmap(QPixmap::fromImage(imgcp));//QImage 显示速度慢
+        globalImg2=img.copy();
+        qDebug()<<"src.format() "<<img.format();
+
+    }
+
+
+
+}
+
+void Widget::on_pushButton_4_clicked()
+{
+    QTime time;
+    time.start();
+    QImage img=globalImg2;
+    if(img.isNull())
+    {
+        QMessageBox::information(this,"信息","打开文件失败");
+    }
+
+    else
+    {
+        DmtxMessage *msg;
+        DmtxRegion *reg;
+        QImage src =img.copy();
+        DmtxImage *imgdtx;
+        QPixmap pix=QPixmap::fromImage(src);
+        QString outstr;
+        int leftLineAngle;
+        int bottomLineAngle;
+        int cornerx;
+        int cornery;
+
+        qDebug()<<"src.format() "<<src.format();
+
+        if(src.format()==QImage::Format_Mono)
+        {
+        src=src.convertToFormat(QImage::Format_ARGB32);
+        qDebug()<<"转换后：src.format() "<<src.format();
+        }
+
+        int pack=DmtxPack32bppXRGB;
+        switch(src.format())
+            {
+            case QImage::Format_ARGB32:
+            pack=DmtxPack32bppXRGB;
+            break;
+            case QImage::Format_RGB32:
+            pack=DmtxPack32bppXRGB;
+            break;
+            case QImage::Format_RGB888:
+            pack=DmtxPack24bppRGB;
+            break;
+            case QImage::Format_Indexed8:
+            pack=DmtxPack8bppK;
+            break;
+            case  QImage::Format_Grayscale8:
+            pack=DmtxPack8bppK;
+            }
+
+        // 增加超时时间。
+        DmtxTime beginTime = dmtxTimeNow();	// 根据系统设置情况，获得当前时间
+        long timeout_ms = 200;
+        DmtxTime stopTime = dmtxTimeAdd(beginTime, timeout_ms);	// 增加xx ms
+
+        imgdtx = dmtxImageCreate(src.bits(),src.width(),src.height(),pack);
+        assert(imgdtx != NULL);
+
+        DmtxDecode *dec = dmtxDecodeCreate(imgdtx, 1);
+        assert(dec != NULL);
+
+        reg = dmtxRegionFindNext(dec,&stopTime);	// 如果超时则认为没有找到
+        // assert(reg != NULL);
+
+        if(dmtxTimeExceeded(stopTime))
+        {
+            qDebug()<<"超时";
+             QMessageBox::information(this,"信息","解码超时间");
+        }
+       else
+        {
+            if (reg != NULL)
+            {
+                msg = dmtxDecodeMatrixRegion(dec, reg, DmtxUndefined);
+                if (msg != NULL)
+                {
+                    //                    cout << msg->output << endl;
+                    //                    cout << msg->outputIdx << endl;
+
+                    std::string strout = (char*)msg->output;//解码信息
+                    outstr=QString::fromStdString(strout);
+                    QString outmsg=QString("<font color=\"#00FF00\">%1</font>").arg(QString::fromStdString(strout));
+                    ui->textEdit->setText(outmsg);
+
+                    //  qDebug()<<"reg->leftAngle "<<reg->leftAngle;
+                    //  qDebug()<<"reg->leftAngle "<<reg->bottomAngle;
+                    //   qDebug()<<"reg->finalPos.X "<<reg->finalPos.X;
+                    //   qDebug()<<"reg->finalPos.Y "<<reg->finalPos.Y;
+                    //qDebug()<<"reg->leftLine.mag"<<reg->leftLine.mag;
+                    //qDebug()<<"reg->leftLine.hOffset"<<reg->leftLine.hOffset;
+                    //qDebug()<<"reg->leftLine.stepBeg"<<reg->leftLine.stepBeg;
+                    //qDebug()<<"reg->leftLine.stepPos"<<reg->leftLine.stepPos;
+                    //qDebug()<<"reg->leftLine.stepNeg"<<reg->leftLine.stepNeg;
+                    //qDebug()<<"reg->leftLine.distSq"<<reg->leftLine.distSq;
+                    //qDebug()<<"reg->leftLine.locBeg.X "<<reg->leftLine.locBeg.X;
+                    //qDebug()<<"reg->leftLine.locBeg.Y "<<reg->leftLine.locBeg.Y;
+
+                    qDebug()<<"reg->leftLine.locPos.X "<<reg->leftLine.locPos.X;//准的
+                    qDebug()<<"reg->leftLine.locPos.Y "<<reg->leftLine.locPos.Y;//准的
+                    qDebug()<<"reg->leftLine.locNeg.X "<<reg->leftLine.locNeg.X;//准的
+                    qDebug()<<"reg->leftLine.locNeg.Y "<<reg->leftLine.locNeg.Y;//准的
+                    qDebug()<<"bottomLine.locPos.X "<<reg->bottomLine.locPos.X;
+                    qDebug()<<"bottomLine.locPos.Y "<<reg->bottomLine.locPos.Y;
+                    qDebug()<<"bottomLine.locNeg.X "<<reg->bottomLine.locNeg.X;
+                    qDebug()<<"bottomLine.locNeg.y "<<reg->bottomLine.locNeg.Y;
+
+                    QPainter p;
+                    p.begin(&pix);
+                    p.setPen(QPen(Qt::blue, 2));
+                    p.drawEllipse(reg->leftLine.locPos.X-5,pix.height()-reg->leftLine.locPos.Y-5, 10, 10);//准的
+                    p.setPen(QPen(Qt::yellow, 2));
+                    p.drawEllipse(reg->leftLine.locNeg.X-5,img.height()-reg->leftLine.locNeg.Y-5, 10, 10);//准的
+
+                    p.setPen(QPen(Qt::darkRed, 2));
+                    p.drawEllipse(reg->bottomLine.locPos.X-5,img.height()-reg->bottomLine.locPos.Y-5, 10, 10);//准的
+                    p.setPen(QPen(Qt::darkGreen, 2));
+                    p.drawEllipse(reg->bottomLine.locNeg.X-5,img.height()-reg->bottomLine.locNeg.Y-5, 10, 10);//准的
+
+                    int lineOriginX=(reg->leftLine.locNeg.X+reg->bottomLine.locPos.X)/2;
+                    int lineOriginY=img.height()-(reg->leftLine.locNeg.Y+reg->bottomLine.locPos.Y)/2;
+                    int lineLeftX=reg->leftLine.locPos.X;
+                    int lineLeftY=pix.height()-reg->leftLine.locPos.Y;
+                    int lineBottomX=reg->bottomLine.locNeg.X;
+                    int lineBottomY=img.height()-reg->bottomLine.locNeg.Y;
+
+                    p.setPen(QPen(Qt::red, 2));
+                    p.drawLine(lineOriginX,lineOriginY,lineLeftX,lineLeftY);
+                    p.drawLine(lineOriginX,lineOriginY,lineBottomX,lineBottomY);
+                    p.end();
+
+                    leftLineAngle=reg->leftLine.angle;
+                    bottomLineAngle=reg->bottomAngle;
+                    cornerx=lineOriginX;
+                    cornery=lineOriginY;
+
+                    dmtxMessageDestroy(&msg);
+                }
+                else
+                {
+                    qDebug()<<"无法检测到2";
+                    QMessageBox::information(this,"信息","无法检测到2");
+                }
+                dmtxRegionDestroy(&reg);
+            }
+            else
+            {
+                qDebug()<<"无法检测到1";
+                QMessageBox::information(this,"信息","无法检测到1");
+            }
+
+        }
+
+        dmtxDecodeDestroy(&dec);
+        dmtxImageDestroy(&imgdtx);
+
+        qDebug()<<time.elapsed()/1000.0<<"s";
+
+        ui->label->clear();
+//        src=src.scaled(ui->label->width(),ui->label->height(),Qt::KeepAspectRatio);//Qt::KeepAspectRatio自适应大小，不变形
+//        ui->label->setPixmap(QPixmap::fromImage(src));//QImage 显示速度慢
+        pix=pix.scaled(ui->label->width(),ui->label->height(),Qt::KeepAspectRatio);//Qt::KeepAspectRatio自适应大小，不变形
+        ui->label->setPixmap(pix);
+
+        QString base_str=outstr.left(8);
+        QString label_base_text=QString("信息:左线 %1°底边 %2°角点X %3 角点Y %4 内容 %4..").
+                arg(leftLineAngle).arg(bottomLineAngle).arg(cornerx).arg(cornery).arg(base_str);
+        ui->label_base->setText(label_base_text);
+
+        QString timestr=QString("解码耗时：%1s").arg(time.elapsed()/1000.0);
+        ui->label_time->setText(timestr);
+    }
+
+
 }
